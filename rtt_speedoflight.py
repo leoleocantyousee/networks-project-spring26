@@ -45,31 +45,31 @@ def measure_rtt(url: str, probes: int = PROBES) -> dict:
 
     for i in range(probes):
         try:
-            # Start timer
+            # Begin my timer
             start_time = time.perf_counter()
             
-            # Request the page
+            # Go and request the page
             resp = urllib.request.urlopen(url, timeout=3)
-            resp.read(1) # Grab 1 byte to ensure connection is active
+            resp.read(1) # Get 1 byte to make sure that the connection is active
             resp.close()
             
-            # Stop timer and convert to ms
+            # Stop timer then convert to ms
             end_time = time.perf_counter()
             duration = (end_time - start_time) * 1000
             samples.append(duration)
             
         except Exception:
-            # If site is unreachable or times out, increment loss
+            # If site is unreachable or just times out then add a loss
             lost += 1
         
-        # Space out requests slightly
+        # Adds spacing between the requests
         time.sleep(0.2)
 
     if len(samples) == 0:
         return {"min_ms": None, "mean_ms": None, "median_ms": None,
                 "loss_pct": 100.0, "samples": []}
 
-    # Calculate stats using numpy as requested in TODO
+    # Calculate stats with numpy
     return {
         "min_ms": float(np.min(samples)),
         "mean_ms": float(np.mean(samples)),
@@ -84,10 +84,10 @@ def measure_rtt(url: str, probes: int = PROBES) -> dict:
 # ─────────────────────────────────────────────
 
 def great_circle_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    # Earth radius in kilometers
+    # set earth's radius(km)
     R = 6371.0
     
-    # Need everything in radians for math functions
+    # Put everythingin radians
     r_lat1, r_lon1 = math.radians(lat1), math.radians(lon1)
     r_lat2, r_lon2 = math.radians(lat2), math.radians(lon2)
     
@@ -95,7 +95,7 @@ def great_circle_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float
     dlat = r_lat2 - r_lat1
     dlon = r_lon2 - r_lon1
     
-    # Haversine math
+    # DO the haversine math
     a = math.sin(dlat/2)**2 + math.cos(r_lat1) * math.cos(r_lat2) * math.sin(dlon/2)**2
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     
@@ -109,7 +109,7 @@ def get_my_location() -> tuple[float, float, str]:
         lat, lon = map(float, r["loc"].split(","))
         return lat, lon, r.get("city", "Your Location")
     except Exception:
-        print("Could not auto-detect location. Defaulting to Boston.")
+        print("Could not auto detect location. Defaulting to Boston.")
         return 42.3601, -71.0589, "Boston"
 
 
@@ -117,20 +117,20 @@ def compute_inefficiency(results: dict, src_lat: float, src_lon: float) -> dict:
     for city in results:
         data = results[city]
         
-        # 1. Get distance using city coords
+        # Get distance with the cities coordinates
         lat2, lon2 = data["coords"]
         dist = great_circle_km(src_lat, src_lon, lat2, lon2)
         data["distance_km"] = dist
         
-        # 2. Theoretical min = (dist / fiber speed) * 2 (round trip) * 1000 (convert to ms)
+        # The theoretical min = (dist / fiber speed) * 2 (round trip) * 1000 (ms)
         theor_min = (dist / FIBER_SPEED_KM_S) * 2 * 1000
         data["theoretical_min_ms"] = theor_min
         
-        # 3. Ratio calculation
+        # Calculate the ratio
         if data["median_ms"] is not None:
             ratio = data["median_ms"] / theor_min
             data["inefficiency_ratio"] = ratio
-            # 4. Flag high inefficiency if ratio > 3.0
+            # If ratio is greater than 3 flag it
             data["high_inefficiency"] = ratio > 3.0
         else:
             data["inefficiency_ratio"] = None
@@ -146,16 +146,16 @@ def compute_inefficiency(results: dict, src_lat: float, src_lon: float) -> dict:
 def make_plots(results: dict):
     os.makedirs(FIGURES_DIR, exist_ok=True)
     
-    # Filter only cities that actually responded
+    # Filter out the cities that did not respond
     reachable = {}
     for city, data in results.items():
         if data.get("median_ms") is not None:
             reachable[city] = data
             
-    # Sort cities by how far they are from the source
+    # Sort cities based off distance from me
     sorted_names = sorted(reachable.keys(), key=lambda c: reachable[c]["distance_km"])
 
-    # Figure 1: Bar Chart
+    # Figure 1 Bar Chart
     plt.figure(figsize=(11, 6))
     x_indices = np.arange(len(sorted_names))
     
@@ -173,7 +173,7 @@ def make_plots(results: dict):
     plt.tight_layout()
     plt.savefig(f"{FIGURES_DIR}/fig1_rtt_comparison.png", dpi=120)
 
-    # Figure 2: Scatter Plot
+    # Figure 2 Scatter Plot
     plt.figure(figsize=(10, 7))
     for name in sorted_names:
         info = reachable[name]
@@ -182,7 +182,7 @@ def make_plots(results: dict):
         plt.scatter(info["distance_km"], info["median_ms"], c=dot_color, s=100)
         plt.text(info["distance_km"] + 150, info["median_ms"], name, fontsize=9)
 
-    # Draw the dashed theoretical limit line
+    # Make a dashed line for the theoretical limit line
     farthest = max([reachable[n]["distance_km"] for n in sorted_names])
     x_line = np.linspace(0, farthest, 100)
     y_line = (x_line / FIBER_SPEED_KM_S) * 2 * 1000
